@@ -1,0 +1,7 @@
+.idea/
+/archive
+/code_styles/*
+/output/*
+.env
+__pycache__/
+*.pyc
