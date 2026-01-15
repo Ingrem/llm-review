@@ -17,7 +17,11 @@ class LlmWorkflow:
         :param sys_prompt: system prompt, required for some models
         """
         if default_model:
-            self.sys_prompt = "You are Qwen, created by Alibaba Cloud. You are a helpful assistant."
+            self.sys_prompt = (
+                "You are Qwen, created by Alibaba Cloud. You are a helpful assistant. "
+                "However, in this session, act as a Senior Code Reviewer. "
+                "You must be strict, concise, and focus only on code quality."
+            )
             self.model_name = "Qwen/Qwen2.5-Coder-14B-Instruct"
         else:
             self.sys_prompt = sys_prompt

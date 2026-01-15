@@ -1,5 +1,6 @@
 import time
 from pathlib import Path
+from jinja2 import Environment, FileSystemLoader
 
 
 
@@ -17,6 +18,9 @@ class ReviewWorkflow:
         self.root_dir = root_dir
         self.max_lines = max_lines
         self.styles = team_styles
+
+        env = Environment(loader=FileSystemLoader("templates"))
+        self.template = env.get_template("review_prompt.j2")
 
     def _split_large_diffs(self, changes):
         """Split large diffs into smaller chunks."""
@@ -37,31 +41,11 @@ class ReviewWorkflow:
 
     def _make_prompt(self, file_path, diff):
         """Prepare review prompt for LLM."""
-        return f"""
-        Ты опытный ревьюер кода.
-        Твоя задача проверить мердж реквест, найти проблемные места и написать предложения по их устранению.
-        Анализируйте ТОЛЬКО изменённые и добавленные строки.
-
-        Модуль: {file_path}
-
-        Код стайл команды (для контекста):
-        {self.styles}
-
-        Важно:
-        - Дай рекомендации ТОЛЬКО по изменённым и добавленным строкам.
-        - Не давай рекомендации по поводу документации и описании изменений.
-        - Если замечаний НЕТ — выведи только строку "Нет замечаний".
-        - Если замечания ЕСТЬ — перечисли их, указывая место, описание проблемы и пример исправления.
-        - В конце НИКОГДА не выводи "Нет замечаний", если уже были перечислены проблемы.
-
-
-        Формат ответа:
-        1. <указание на место с проблемой> описание проблемы, варианты решения, пример решения
-        2. ...
-
-        Код для проверки:
-        {diff}
-        """
+        return self.template.render(
+            style_guide=self.styles,
+            diff_content=diff,
+            module_name=file_path,
+        )
 
     def _review_one_file_or_chunk(self, part):
         """Review one file (or chunk for large files)."""
