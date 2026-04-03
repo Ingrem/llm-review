@@ -1,82 +1,136 @@
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, GenerationConfig, BitsAndBytesConfig
+import re
+import time
+from typing import Tuple, Dict
+from llama_cpp import Llama
+from llama_cpp.llama_types import (
+    ChatCompletionRequestSystemMessage,
+    ChatCompletionRequestUserMessage,
+)
 
 
 class LlmWorkflow:
     """
-    LLM wrapper for text generation using HuggingFace Transformers.
-    Provides quantized model loading and prompt-based response generation.
+    A workflow class for managing Large Language Model inference using llama.cpp.
+
+    This class handles model initialization, prompt execution, performance
+    metrics tracking, and specialized output parsing (e.g., separating
+    reasoning/thinking blocks from the final answer).
     """
 
-    def __init__(self, default_model=True, model_name="", sys_prompt=""):
+    def __init__(self):
         """
-        Initialize workflow with model and tokenizer.
+        Initializes the LlmWorkflow with a specific GGUF model and hardware-optimized settings.
 
-        :param default_model: use default model designed for this workflow
-        :param model_name: HuggingFace model name or local path
-        :param sys_prompt: system prompt, required for some models
+        Configures the context window, GPU acceleration layers, and thread count
+        for optimal performance on RTX-series hardware.
         """
-        if default_model:
-            self.sys_prompt = (
-                "You are Qwen, created by Alibaba Cloud. You are a helpful assistant. "
-                "However, in this session, act as a Senior Code Reviewer. "
-                "You must be strict, concise, and focus only on code quality."
-            )
-            self.model_name = "Qwen/Qwen2.5-Coder-14B-Instruct"
+        self.model_path = "./models/Qwen3.5-35B-A3B-Q5_K_M.gguf"
+        self.n_ctx = 32768
+        self.max_tokens = int(self.n_ctx / 2)
+        self.temperature = 0.1
+
+        self.llm = Llama(
+            model_path=self.model_path,
+            n_gpu_layers=15,
+            n_ctx=self.n_ctx,
+            n_threads=16,
+            verbose=False,
+            flash_attn=True,
+        )
+
+    @staticmethod
+    def _metrics(output: Dict, start_time: float, end_time: float) -> None:
+        """
+        Calculates and prints performance metrics for the inference task
+
+        Args:
+            output: The raw dictionary response from the llama.cpp completion.
+            start_time: Epoch timestamp when the request started.
+            end_time: Epoch timestamp when the request finished.
+        """
+        usage = output['usage']
+        prompt_tokens = usage['prompt_tokens']
+        completion_tokens = usage['completion_tokens']
+        total_time = end_time - start_time
+        tps = completion_tokens / total_time
+
+        print(f"\n--- Metrics ---")
+        print(f"Prompt tokens: {prompt_tokens}")
+        print(f"Tokens: {completion_tokens}")
+        print(f"Time: {total_time:.2f}s")
+        print(f"Speed: {tps:.2f} tokens/sec")
+        print(f"\n--- End Metrics ---")
+
+    @staticmethod
+    def _split_thinking(text: str) -> Tuple[str, str]:
+        """
+        Extracts internal reasoning blocks from the model's output.
+
+        Models like Qwen and Gemma often use <think> tags for chain-of-thought.
+        This method separates those thoughts from the actual final response.
+
+        Args:
+            text: The raw string content received from the LLM.
+
+        Returns:
+            A tuple containing (thinking_content, cleaned_response_text).
+        """
+        end_tag = "</think>"
+        pos = text.find(end_tag)
+        if pos != -1:
+            thinking = text[:pos].strip()
+            clean = text[pos + len(end_tag):].strip()
+
+            print(f"\n--- Thinking ---")
+            print(thinking)
+            print(f"\n--- End Thinking ---")
+
+            return thinking, clean
         else:
-            self.sys_prompt = sys_prompt
-            self.model_name = model_name
+            return text, text
 
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-        self.llm = self._load_model()
-
-    def _load_model(self):
+    def generate_response(self, prompt: str) -> str:
         """
-        Load quantized LLM into memory with 4-bit precision.
+        Processes a user prompt and returns a clean AI response.
 
-        :return: Model instance
-        """
-        quant_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_use_double_quant=True,
-            bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype=torch.bfloat16,
-        )
-        return AutoModelForCausalLM.from_pretrained(
-            self.model_name,
-            quantization_config=quant_config,
-            torch_dtype=torch.bfloat16,
-            device_map="auto",
-        )
+        Handles message formatting, calls the LLM inference engine,
+        triggers metrics logging, and post-processes the text to remove
+        internal reasoning blocks.
 
-    def generate_response(self, prompt: str, max_tokens: int, temperature: float = 0.7) -> str:
-        """
-        Generate response from the model for a given prompt.
+        Args:
+            prompt: The user's input string or code snippet for review.
 
-        :param prompt: User input text
-        :param max_tokens: Maximum number of tokens to generate
-        :param temperature: Sampling temperature
-        :return: Generated response as plain text
+        Returns:
+            The final processed response string without thinking tags.
+
+        Raises:
+            ValueError: If the model returns an unexpected stream or iterator instead of a dict.
         """
-        generation_config = GenerationConfig.from_pretrained(
-            self.model_name,
-            max_new_tokens=max_tokens,
-            temperature=temperature,
-        )
+        start_time = time.time()
 
         messages = [
-            {"role": "system", "content": self.sys_prompt},
-            {"role": "user", "content": prompt},
+            ChatCompletionRequestSystemMessage(
+                role="system",
+                content="You are a senior developer. Focus your thinking ONLY on complex logic. "
+                        "For simple style issues, skip the reasoning and just provide the comment."
+            ),
+            ChatCompletionRequestUserMessage(role="user", content=prompt),
         ]
 
-        chat_prompt = self.tokenizer.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=True,
+        output = self.llm.create_chat_completion(
+            messages=messages,
+            max_tokens=self.max_tokens,
+            temperature=self.temperature,
+            repeat_penalty=1.1,
+            stop=["<|im_end|>", "<|endoftext|>"]
         )
 
-        inputs = self.tokenizer([chat_prompt], return_tensors="pt").to(self.llm.device)
-        output_ids = self.llm.generate(**inputs, generation_config=generation_config)[0]
+        if not isinstance(output, dict):
+            raise ValueError("Expected dict response, but got a stream/iterator")
 
-        generated_ids = output_ids[len(inputs["input_ids"][0]):]
-        return self.tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
+        self._metrics(output, start_time, time.time())
+
+        full_content = output['choices'][0]['message']['content']
+        _, clean_text = self._split_thinking(full_content)
+
+        return clean_text

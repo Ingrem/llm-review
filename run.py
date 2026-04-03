@@ -11,8 +11,10 @@ load_dotenv()
 GITLAB_TOKEN = os.environ.get("GITLAB_TOKEN", "")
 MR_LINK = os.environ.get("MR_LINK", "").strip()
 
-llm = LlmWorkflow(model_name="Qwen/Qwen2.5-Coder-14B-Instruct")
+print("Connecting to LLM...")
+llm = LlmWorkflow()
+print("Connecting to GitLab...")
 gitlab = GitlabWorkflow(gitlab_token=GITLAB_TOKEN)
-reviewer = ReviewWorkflow(llm, gitlab, ROOT_DIR, 200, styles)
+reviewer = ReviewWorkflow(llm, gitlab, ROOT_DIR, styles)
 
 reviewer.review_mr(MR_LINK)

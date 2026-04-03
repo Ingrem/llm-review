@@ -1,7 +1,7 @@
 .idea/
 /archive
-/code_styles/*
 /output/*
+/models/*
 .env
 __pycache__/
 *.pyc
