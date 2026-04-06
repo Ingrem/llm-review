@@ -1,8 +1,8 @@
 from src.llm_workflow import LlmWorkflow
 
-
-llm = LlmWorkflow()
+llm = LlmWorkflow(True, 8000)
 
 prompt = "Напиши функцию квадрата чисел"
-review = llm.generate_response(prompt, max_tokens=8192, temperature=0.3)
+review = llm.generate_response(prompt)
+print("\n\n==================== RESULT ====================\n\n")
 print(review)

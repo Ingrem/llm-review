@@ -25,6 +25,16 @@ Version 1.0.0 use Qwen3.5-35B-A3B and have production ready results.
 Model require manual downloading, put it into ./llm-review/models/Qwen3.5-35B-A3B-Q5_K_M.gguf. 
 This model can be partially swapped to RAM and work with ~20 tokens/second.
 
+Version 1.1.0 add API support for local models, tested with llama.cpp server and gemini 4 model.
+
+### 4. Use api
+Although this tool is designed to work directly with a local LLM, you may find it more convenient to run the model on a separate server via an API.
+
+To enable API mode, add the following lines to your .env file:
+```env
+USE_API=true
+API_PORT=8000
+```
 ## Usage
 Run the script using the following command in your terminal
 `python run.py`

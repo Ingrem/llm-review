@@ -76,9 +76,11 @@ Notes & Considerations
 - This module does not log tokens or response bodies to avoid leaking secrets.
 - For very large MRs, consider pagination/rate limits and backoff handling upstream.
 """
+
 import difflib
+from urllib.parse import quote, urlparse
+
 import requests
-from urllib.parse import urlparse, quote
 
 
 class GitlabWorkflow:
@@ -106,12 +108,13 @@ class GitlabWorkflow:
 
         try:
             mr_index = path_parts.index("merge_requests")
-        except ValueError:
-            raise ValueError("Invalid Merge Request URL")
+        except ValueError as err:
+            raise ValueError("Invalid Merge Request URL") from err
 
         # project_path может заканчиваться на /-/
-        project_path = "/".join(path_parts[:mr_index - 1]) if path_parts[mr_index - 1] == "-" \
-            else "/".join(path_parts[:mr_index])
+        project_path = (
+            "/".join(path_parts[: mr_index - 1]) if path_parts[mr_index - 1] == "-" else "/".join(path_parts[:mr_index])
+        )
 
         mr_iid = int(path_parts[mr_index + 1])
         self.gitlab_api = f"{parsed.scheme}://{parsed.netloc}/api/v4"
@@ -122,11 +125,14 @@ class GitlabWorkflow:
         Fetch raw file content at a given ref.
         Returns text or None for binary/unavailable files.
         """
-        url = (f"{self.gitlab_api}/projects/{quote(project_path, safe='')}"
-               f"/repository/files/{quote(file_path, safe='')}/raw")
+        url = (
+            f"{self.gitlab_api}/projects/{quote(project_path, safe='')}"
+            f"/repository/files/{quote(file_path, safe='')}/raw"
+        )
         resp = requests.get(url, headers=self._headers(), params={"ref": ref}, timeout=60)
 
-        if resp.status_code == 404:
+        not_found_code = 404
+        if resp.status_code == not_found_code:
             return None
         resp.raise_for_status()
 
@@ -160,12 +166,11 @@ class GitlabWorkflow:
         """Generate unified diff from base and head file versions."""
         base_lines = [] if base_text is None else base_text.splitlines()
         head_lines = [] if head_text is None else head_text.splitlines()
-        return "\n".join(difflib.unified_diff(
-            base_lines, head_lines,
-            fromfile=old_path or "/dev/null",
-            tofile=new_path or "/dev/null",
-            lineterm=""
-        ))
+        return "\n".join(
+            difflib.unified_diff(
+                base_lines, head_lines, fromfile=old_path or "/dev/null", tofile=new_path or "/dev/null", lineterm=""
+            )
+        )
 
     def get_mr_changes(self, project_path: str, mr_iid: int) -> list[dict]:
         """
@@ -185,34 +190,28 @@ class GitlabWorkflow:
             overflow = ch.get("overflow") or ch.get("too_large")
 
             if api_diff and not overflow:
-                results.append({
-                    "old_path": old_path,
-                    "new_path": new_path,
-                    "diff": api_diff,
-                    "generated": False,
-                    "binary": False,
-                })
+                results.append(
+                    {"old_path": old_path, "new_path": new_path, "diff": api_diff, "generated": False, "binary": False}
+                )
                 continue
 
             base_text = None if is_new else self._fetch_raw_text(project_path, base_sha, old_path)
             head_text = None if is_del else self._fetch_raw_text(project_path, head_sha, new_path)
 
             if base_text is None and head_text is None:
-                results.append({
-                    "old_path": old_path,
-                    "new_path": new_path,
-                    "diff": "",
-                    "generated": False,
-                    "binary": True,
-                })
+                results.append(
+                    {"old_path": old_path, "new_path": new_path, "diff": "", "generated": False, "binary": True}
+                )
                 continue
 
-            results.append({
-                "old_path": old_path,
-                "new_path": new_path,
-                "diff": self._generate_diff(old_path, new_path, base_text, head_text),
-                "generated": True,
-                "binary": False,
-            })
+            results.append(
+                {
+                    "old_path": old_path,
+                    "new_path": new_path,
+                    "diff": self._generate_diff(old_path, new_path, base_text, head_text),
+                    "generated": True,
+                    "binary": False,
+                }
+            )
 
         return results

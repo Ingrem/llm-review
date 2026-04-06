@@ -1,7 +1,7 @@
 import time
 from pathlib import Path
-from jinja2 import Environment, FileSystemLoader
 
+from jinja2 import Environment, FileSystemLoader
 
 
 class ReviewWorkflow:
@@ -24,10 +24,7 @@ class ReviewWorkflow:
 
     def _make_prompt(self, diff):
         """Prepare review prompt for LLM."""
-        return self.template.render(
-            style_guide=self.styles,
-            diff_content=diff,
-        )
+        return self.template.render(style_guide=self.styles, diff_content=diff)
 
     def _review_all_changes(self, changes):
         """
@@ -37,8 +34,8 @@ class ReviewWorkflow:
         current_batch_diffs = ""
 
         for part in changes:
-            file_path = part.get('new_path', 'unknown')
-            diff = part['diff']
+            file_path = part.get("new_path", "unknown")
+            diff = part["diff"]
             file_block = f"--- FILE: {file_path} ---\n{diff}\n\n"
 
             if len(current_batch_diffs) + len(file_block) > self.max_chars_per_batch and current_batch_diffs:
@@ -51,19 +48,19 @@ class ReviewWorkflow:
             batches.append(current_batch_diffs)
 
         total_batches = len(batches)
-        print(f"[INFO] Всего сформировано пакетов для ревью: {total_batches}")
+        print(f"LOG: Total batches created for review: {total_batches}")
 
         all_reviews = []
         start_total_gen = time.perf_counter()
 
         for i, batch_content in enumerate(batches, 1):
-            print(f"[INFO] Обработка пакета {i}/{total_batches}...")
+            print(f"LOG: Processing batch {i}/{total_batches}...")
 
             review = self._process_batch(batch_content, i, total_batches)
             all_reviews.append(review)
 
         elapsed_gen = time.perf_counter() - start_total_gen
-        print(f"[INFO] Суммарная генерация {total_batches}/{total_batches}: {elapsed_gen:.2f} сек")
+        print(f"\nLOG: [COMPLETED] Total generation time: {elapsed_gen:.2f}s\n")
 
         return "\n\n---\n\n".join(all_reviews)
 
@@ -84,7 +81,7 @@ class ReviewWorkflow:
 
         result_text = self._review_all_changes(changes)
 
-        print("\n\n==================== КОД-РЕВЬЮ ====================\n\n")
+        print("\n==================== CODE-REVIEW ====================\n\n")
         print(result_text)
 
         output_dir = Path(self.root_dir) / "output"

@@ -1,9 +1,32 @@
 [project]
 name = "llm-review"
-version = "1.0.0"
+version = "1.1.0"
 requires-python = ">=3.12"
 dependencies = [
     "python-dotenv>=1.2.2",
     "requests>=2.33.1",
     "llama-cpp-python>=0.3.20",
 ]
+
+[tool.ruff]
+target-version = "py314"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "C90", "UP", "B", "SIM", "RUF", "TID", "TCH", "I", "PL"]
+ignore = ["RUF001", "RUF002", "RUF003", "SIM117", "E402"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 15
+
+[tool.ruff.lint.pylint]
+max-args = 10
+max-locals = 15
+max-positional-args = 10
+
+[tool.ruff.lint.isort]
+split-on-trailing-comma = false
+
+[tool.ruff.format]
+quote-style = "double"
+skip-magic-trailing-comma = true
